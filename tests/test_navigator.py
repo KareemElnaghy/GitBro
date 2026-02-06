@@ -54,16 +54,6 @@ def test_navigator():
         
         result_state = navigator_agent(initial_state)
         
-        # Fetch README content
-        readme_content = None
-        readme_files = ['README.md', 'README.rst', 'README.txt', 'README']
-        for readme_file in readme_files:
-            try:
-                readme_content = github_client.get_raw_content(owner, repo_name, readme_file, branch)
-                break
-            except:
-                continue
-        
         print("\n" + "-" * 80)
         print("ANALYSIS COMPLETE")
         print("-" * 80)
@@ -92,12 +82,8 @@ def test_navigator():
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             base_filename = f"navigator_report_{repo_name}_{timestamp}"
             
-            # Summarize README (first 500 characters)
-            readme_summary = "No README found"
-            if readme_content:
-                readme_summary = readme_content[:500].strip()
-                if len(readme_content) > 500:
-                    readme_summary += "..."
+            # Get README from navigator output
+            readme_summary = nav_map.get('readme_summary', 'No README found')
             
             # Create markdown report
             report_content = f"""# Navigator Agent Report
