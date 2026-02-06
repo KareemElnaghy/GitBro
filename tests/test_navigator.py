@@ -23,7 +23,7 @@ def test_navigator():
     github_client = GitHubClient(token=github_token)
     
     # add here the repo to test
-    test_repo = "https://github.com/mohamadassaf96/WIFI_Jammer"
+    test_repo = "https://github.com/JanaElfeky/CustomerChurnPredictor"
     print(f"Analyzing repository: {test_repo}\n")
     
     try:
