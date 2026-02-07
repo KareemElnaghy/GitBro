@@ -11,7 +11,180 @@ from src.graph import run_analysis
 import os
 
 # --- Page config ---
-st.set_page_config(page_title="GitBro", page_icon="🔍", layout="wide")
+st.set_page_config(
+    page_title="GitBro - AI Repository Analysis",
+    page_icon="🤖",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
+        'About': "GitBro - AI-powered repository analysis and onboarding"
+    }
+)
+
+# --- Custom CSS for production-grade styling ---
+st.markdown("""
+<style>
+    /* Main theme colors */
+    :root {
+        --primary-color: #6366f1;
+        --secondary-color: #8b5cf6;
+        --success-color: #10b981;
+        --danger-color: #ef4444;
+        --background-dark: #0f172a;
+        --card-bg: #1e293b;
+    }
+    
+    /* Hide Streamlit branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    
+    /* Custom header styling */
+    .main-header {
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        padding: 2rem;
+        border-radius: 1rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
+    }
+    
+    .main-header h1 {
+        color: white;
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin: 0;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .main-header p {
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 1.1rem;
+        margin: 0.5rem 0 0 0;
+    }
+    
+    /* Metric cards */
+    .metric-card {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        padding: 1.5rem;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(99, 102, 241, 0.3);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(99, 102, 241, 0.2);
+    }
+    
+    /* Sidebar styling */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+    }
+    
+    [data-testid="stSidebar"] h1 {
+        color: #6366f1;
+        font-weight: 700;
+    }
+    
+    /* Button styling */
+    .stButton > button {
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        color: white;
+        border: none;
+        border-radius: 0.5rem;
+        padding: 0.75rem 2rem;
+        font-weight: 600;
+        transition: all 0.3s;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+    }
+    
+    /* Input styling */
+    .stTextInput > div > div > input {
+        border-radius: 0.5rem;
+        border: 2px solid rgba(99, 102, 241, 0.3);
+        transition: border-color 0.3s;
+    }
+    
+    .stTextInput > div > div > input:focus {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+    
+    /* Chat message styling */
+    .stChatMessage {
+        border-radius: 0.75rem;
+        padding: 1rem;
+        margin: 0.5rem 0;
+    }
+    
+    /* Expander styling */
+    .streamlit-expanderHeader {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        border-radius: 0.5rem;
+        font-weight: 600;
+    }
+    
+    /* Status indicator */
+    .status-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 1rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        margin: 0.25rem;
+    }
+    
+    .status-success {
+        background: rgba(16, 185, 129, 0.2);
+        color: #10b981;
+    }
+    
+    .status-info {
+        background: rgba(99, 102, 241, 0.2);
+        color: #6366f1;
+    }
+    
+    /* Loading animation */
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    
+    .loading-pulse {
+        animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    
+    /* Info box */
+    .info-box {
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+        border-left: 4px solid #6366f1;
+        padding: 1rem 1.5rem;
+        border-radius: 0.5rem;
+        margin: 1rem 0;
+    }
+    
+    /* Sample repo cards */
+    .sample-repo {
+        background: rgba(99, 102, 241, 0.1);
+        padding: 0.75rem 1rem;
+        border-radius: 0.5rem;
+        margin: 0.5rem 0;
+        border: 1px solid rgba(99, 102, 241, 0.3);
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .sample-repo:hover {
+        background: rgba(99, 102, 241, 0.2);
+        transform: translateX(5px);
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # --- Set OpenAI API key ---
 # INSERT YOUR OPENAI API KEY HERE:
@@ -199,15 +372,65 @@ if "context" not in st.session_state:
 
 # --- Sidebar ---
 with st.sidebar:
-    st.title("GitBro 🔍")
-    st.caption("AI-powered repository analysis & onboarding")
+    # Header with gradient
+    st.markdown("""
+    <div style='text-align: center; padding: 1.5rem 0 1rem 0;'>
+        <h1 style='color: #6366f1; font-size: 2.5rem; margin: 0;'>🤖 GitBro</h1>
+        <p style='color: #94a3b8; margin: 0.5rem 0 0 0; font-size: 0.95rem;'>
+            AI-Powered Repository Intelligence
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
 
+    # Input section
+    st.markdown("### 📂 Analyze Repository")
     repo_url = st.text_input(
         "GitHub Repository URL",
         placeholder="https://github.com/owner/repo",
+        label_visibility="collapsed"
     )
 
-    analyze_btn = st.button("Analyze Repository", type="primary", use_container_width=True)
+    analyze_btn = st.button("🚀 Analyze Repository", type="primary", use_container_width=True)
+    
+    # Sample repositories for demo
+    with st.expander("💡 Try Sample Repositories", expanded=False):
+        st.markdown("""
+        <div style='font-size: 0.9rem; color: #94a3b8; margin-bottom: 1rem;'>
+            Click to auto-fill popular repos for demo
+        </div>
+        """, unsafe_allow_html=True)
+        
+        sample_repos = {
+            "Flask (Python Web)": "https://github.com/pallets/flask",
+            "FastAPI (Python API)": "https://github.com/tiangolo/fastapi",
+            "React (JavaScript UI)": "https://github.com/facebook/react",
+            "Express.js (Node Backend)": "https://github.com/expressjs/express",
+        }
+        
+        for name, url in sample_repos.items():
+            if st.button(f"📌 {name}", key=name, use_container_width=True):
+                st.session_state.repo_url = url
+                st.rerun()
+    
+    # Help section
+    with st.expander("ℹ️ How to Use", expanded=False):
+        st.markdown("""
+        **Steps:**
+        1. Enter a GitHub repository URL
+        2. Click **Analyze Repository**
+        3. Wait for the AI agents to process
+        4. Chat with GitBro about the codebase
+        
+        **What you'll get:**
+        - 🗺️ Project structure map
+        - 📊 Architecture diagram
+        - 📚 Onboarding guide
+        - 💬 Interactive Q&A
+        """)
+    
+    st.markdown("<br><br>", unsafe_allow_html=True)
 
     if analyze_btn and repo_url:
         # Reset state for new analysis
@@ -215,20 +438,31 @@ with st.sidebar:
         st.session_state.analysis = None
         st.session_state.repo_url = repo_url
 
-        with st.status("Analyzing repository...", expanded=True) as status:
+        with st.status("🔍 Analyzing repository...", expanded=True) as status:
             try:
-                st.write("Initializing GitHub client...")
+                st.write("⚙️ Initializing GitHub client...")
                 github_client = GitHubClient()
 
-                st.write("Fetching repository data...")
+                st.write("📥 Fetching repository data...")
+                st.write("🤖 Running 5 AI agents...")
                 final_state = run_analysis(repo_url, github_client)
 
                 st.session_state.analysis = final_state
                 st.session_state.context = build_context(final_state)
 
-                status.update(label="Analysis complete!", state="complete")
+                status.update(label="✅ Analysis complete!", state="complete")
+                st.balloons()
             except Exception as e:
-                status.update(label=f"Error: {e}", state="error")
+                status.update(label=f"❌ Error: {str(e)[:100]}", state="error")
+                st.error(f"""
+                **Analysis Failed**  
+                {str(e)}
+                
+                Please check:
+                - Repository URL is correct
+                - Repository is public
+                - You have internet connection
+                """)
 
     # Show repo info after analysis
     if st.session_state.analysis:
@@ -237,29 +471,69 @@ with st.sidebar:
         ctx = st.session_state.analysis.get("context_output", {})
 
         st.divider()
-        st.subheader(meta.get("full_name", ""))
-        st.caption(meta.get("description", ""))
+        
+        # Repository header
+        st.markdown(f"""
+        <div style='background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+                    padding: 1.5rem; border-radius: 1rem; border: 1px solid rgba(99, 102, 241, 0.3);'>
+            <h2 style='color: #6366f1; margin: 0;'>{meta.get('full_name', '')}</h2>
+            <p style='color: #94a3b8; margin: 0.5rem 0 0 0;'>{meta.get('description', '')}</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
 
-        col1, col2 = st.columns(2)
-        col1.metric("Stars", f"{meta.get('stars', 0):,}")
-        col2.metric("Language", meta.get("language", "?"))
+        # Metrics in styled cards
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div style='font-size: 0.875rem; color: #94a3b8;'>⭐ Stars</div>
+                <div style='font-size: 1.5rem; font-weight: 700; color: #fbbf24;'>{meta.get('stars', 0):,}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with col2:
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div style='font-size: 0.875rem; color: #94a3b8;'>🔧 Language</div>
+                <div style='font-size: 1.5rem; font-weight: 700; color: #10b981;'>{meta.get('language', '?')}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with col3:
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div style='font-size: 0.875rem; color: #94a3b8;'>🏗️ Architecture</div>
+                <div style='font-size: 1.2rem; font-weight: 600; color: #6366f1;'>{nav.get('architecture_type', 'unknown')}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with col4:
+            confidence = nav.get('confidence_score', 0)
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div style='font-size: 0.875rem; color: #94a3b8;'>🎯 Confidence</div>
+                <div style='font-size: 1.5rem; font-weight: 700; color: #8b5cf6;'>{confidence:.0%}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-        st.text(f"Architecture: {nav.get('architecture_type', 'unknown')}")
-        st.text(f"Confidence: {nav.get('confidence_score', 0):.0%}")
+        st.markdown("<br>", unsafe_allow_html=True)
 
         if nav.get("entry_points"):
-            with st.expander("Entry Points"):
+            with st.expander("🚪 Entry Points", expanded=False):
                 for ep in nav["entry_points"]:
                     st.code(ep, language=None)
 
         if nav.get("core_modules_detailed"):
-            with st.expander("Core Modules"):
+            with st.expander("📦 Core Modules", expanded=False):
                 for m in nav["core_modules_detailed"]:
-                    st.text(f"{m.get('path', '')} - {m.get('purpose', '')}")
+                    st.markdown(f"**{m.get('path', '')}**")
+                    st.caption(m.get('purpose', ''))
+                    st.markdown("---")
 
         if ctx.get("technologies"):
-            with st.expander("Technologies"):
-                st.write(", ".join(ctx["technologies"]))
+            with st.expander("⚡ Technologies", expanded=False):
+                techs = ctx["technologies"]
+                tech_html = "".join([f"<span class='status-badge status-info'>{t}</span>" for t in techs[:10]])
+                st.markdown(tech_html, unsafe_allow_html=True)
 
         # Architecture Diagram
         if st.session_state.analysis.get("visualization"):
@@ -268,22 +542,63 @@ with st.sidebar:
                 st_mermaid(mermaid_code, height=500)
 
         if st.session_state.analysis.get("errors"):
-            with st.expander("Errors", expanded=False):
+            with st.expander("⚠️ Warnings", expanded=False):
                 for err in st.session_state.analysis["errors"]:
                     st.warning(err)
 
         # Agent log
         msgs = st.session_state.analysis.get("messages", [])
         if msgs:
-            with st.expander("Agent Log"):
+            with st.expander("🤖 Agent Activity Log", expanded=False):
                 for m in msgs:
-                    st.text(m)
+                    st.code(m, language=None)
 
 # --- Main chat area ---
-st.title("GitBro Chat")
+# Custom header
+st.markdown("""
+<div class='main-header'>
+    <h1>💬 Chat with GitBro</h1>
+    <p>Ask me anything about the repository - I've analyzed the code, structure, and documentation</p>
+</div>
+""", unsafe_allow_html=True)
 
 if not st.session_state.analysis:
-    st.info("Enter a GitHub repository URL in the sidebar and click **Analyze Repository** to get started.")
+    # Welcome screen with gradient box
+    st.markdown("""
+    <div class='info-box'>
+        <h3 style='color: #6366f1; margin-top: 0;'>👋 Welcome to GitBro!</h3>
+        <p style='color: #cbd5e1; font-size: 1.05rem;'>
+            GitBro uses 5 specialized AI agents to analyze GitHub repositories and help you understand codebases faster.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("### 🚀 Getting Started")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("""
+        **What GitBro Does:**
+        - 🗺️ Maps project structure
+        - 🔍 Analyzes code complexity
+        - 📊 Generates architecture diagrams
+        - 📚 Creates onboarding guides
+        - 💬 Answers your questions
+        """)
+    
+    with col2:
+        st.markdown("""
+        **Perfect For:**
+        - 👨‍💻 New team members
+        - 🔄 Code reviews
+        - 📖 Documentation
+        - 🎓 Learning new projects
+        - 🏗️ Architecture analysis
+        """)
+    
+    st.markdown("---")
+    st.markdown("### 📌 To begin, enter a repository URL in the sidebar and click **Analyze Repository**")
 else:
     # Show welcome message on first load
     if not st.session_state.chat_history:
@@ -291,18 +606,55 @@ else:
         nav = st.session_state.analysis.get("navigator_map", {})
         ctx = st.session_state.analysis.get("context_output", {})
 
-        welcome = f"""I've finished analyzing **{meta.get('full_name')}**! Here's what I found:
+        welcome = f"""✅ **Analysis Complete!**
 
-- **Architecture**: {nav.get('architecture_type', 'unknown')}
-- **Project Summary**: {nav.get('project_summary', 'N/A')}
-- **Technologies**: {', '.join(ctx.get('technologies', [])[:5])}
+I've analyzed **{meta.get('full_name')}** and here's what I discovered:
+
+---
+
+### 📊 Repository Overview
+- **Architecture Type**: {nav.get('architecture_type', 'unknown')}
+- **Primary Language**: {meta.get('language', 'Unknown')}
+- **Stars**: ⭐ {meta.get('stars', 0):,}
+
+### 🎯 Project Insights
+- **Summary**: {nav.get('project_summary', 'N/A')}
+- **Technologies**: {', '.join(ctx.get('technologies', [])[:8])}
 - **Entry Points**: {', '.join(nav.get('entry_points', [])[:3])}
-- **Complexity**: {ctx.get('complexity_score', 'N/A')}/1.0
-- **Files in repo**: {len(st.session_state.analysis.get('file_tree', []))}
-- **Commits analyzed**: {len(st.session_state.analysis.get('recent_commits', []))}
+- **Complexity Score**: {ctx.get('complexity_score', 'N/A')}/1.0
 
-You can ask me anything about this repository. For example:
+### 📁 Repository Stats
+- **Total Files**: {len(st.session_state.analysis.get('file_tree', []))}
+- **Source Files Analyzed**: {len(st.session_state.analysis.get('code_samples', {}))}
+- **Recent Commits**: {len(st.session_state.analysis.get('recent_commits', []))}
+
+---
+
+### 💡 Example Questions You Can Ask:
+
+**Structure & Navigation:**
 - "Explain the project structure"
+- "Where should I start reading the code?"
+- "What are the main components?"
+
+**Code Understanding:**
+- "How does authentication work?"
+- "What design patterns are used?"
+- "Explain the data flow"
+
+**Architecture & Diagrams:**
+- "Show me the architecture diagram"
+- "What's the entry point of the application?"
+- "How are the modules organized?"
+
+**Learning Path:**
+- "What should I learn first?"
+- "Give me an onboarding roadmap"
+- "What are the key files to understand?"
+
+---
+
+🤖 Ask me anything!
 - "What does main.py do?"
 - "Show me the architecture diagram"
 - "What should I learn first?"
