@@ -254,7 +254,6 @@ This generates sample diagrams in all formats (Mermaid, Graphviz, ASCII) and sav
 - ✅ All diagrams are exportable to files
 - ✅ Graceful degradation if dependencies missing
 
-See [docs/VISUALIZATION.md](docs/VISUALIZATION.md) for detailed visualization documentation.
 
 ---
 
@@ -301,8 +300,7 @@ Each agent:
 
 **Presentation Slides**: 
 
-<!-- Add your slide link here -->
-[Link to Presentation Slides](ADD_YOUR_LINK_HERE)
+[Link to Presentation Slides](https://www.canva.com/design/DAHAkLHJGRw/9Q79sGUtyMSJOZXVGh1Mew/edit?utm_content=DAHAkLHJGRw&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton)
 
 ---
 
@@ -319,27 +317,3 @@ Contributions are welcome! Please feel free to submit pull requests or open issu
 5. Open a Pull Request
 
 ---
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- **LangChain Team** for the excellent LLM framework
-- **LangGraph** for agent orchestration capabilities
-- **Streamlit** for the intuitive UI framework
-- **OpenAI** for GPT-4 model access
-- **Graphviz** and **Mermaid** for visualization tools
-
----
-
-## 📞 Contact
-
-For questions, issues, or suggestions, please open an issue on GitHub or contact the development team.
-
----
-
-**Built with ❤️ using LangGraph, OpenAI, and Streamlit**
