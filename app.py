@@ -4,6 +4,7 @@ Run with: streamlit run app.py
 """
 import json
 import streamlit as st
+from streamlit_mermaid import st_mermaid
 from langchain_openai import ChatOpenAI
 from src.github_client import GitHubClient
 from src.graph import run_analysis
@@ -141,6 +142,37 @@ Answer questions based ONLY on this data. Be specific and reference actual file 
 """
 
 
+def render_message_with_mermaid(message: str):
+    """Render message content, detecting and rendering Mermaid diagrams."""
+    import re
+    
+    # Find mermaid code blocks
+    mermaid_pattern = r'```mermaid\n(.*?)\n```'
+    matches = list(re.finditer(mermaid_pattern, message, re.DOTALL))
+    
+    if not matches:
+        # No mermaid, just render as markdown
+        st.markdown(message)
+        return
+    
+    # Split message and render parts
+    last_end = 0
+    for match in matches:
+        # Render text before mermaid
+        if match.start() > last_end:
+            st.markdown(message[last_end:match.start()])
+        
+        # Render mermaid diagram
+        mermaid_code = match.group(1)
+        st_mermaid(mermaid_code, height=400)
+        
+        last_end = match.end()
+    
+    # Render any remaining text
+    if last_end < len(message):
+        st.markdown(message[last_end:])
+
+
 def get_chat_response(context: str, chat_history: list, user_msg: str) -> str:
     """Send user question to LLM with full analysis context."""
     # Build conversation with context
@@ -229,6 +261,12 @@ with st.sidebar:
             with st.expander("Technologies"):
                 st.write(", ".join(ctx["technologies"]))
 
+        # Architecture Diagram
+        if st.session_state.analysis.get("visualization"):
+            with st.expander("🏗️ Architecture Diagram", expanded=True):
+                mermaid_code = st.session_state.analysis.get("visualization", "")
+                st_mermaid(mermaid_code, height=500)
+
         if st.session_state.analysis.get("errors"):
             with st.expander("Errors", expanded=False):
                 for err in st.session_state.analysis["errors"]:
@@ -277,7 +315,10 @@ You can ask me anything about this repository. For example:
     # Render chat history
     for role, msg in st.session_state.chat_history:
         with st.chat_message(role):
-            st.markdown(msg)
+            if role == "assistant":
+                render_message_with_mermaid(msg)
+            else:
+                st.markdown(msg)
 
     # Chat input
     if user_input := st.chat_input("Ask about the repository..."):
@@ -295,5 +336,5 @@ You can ask me anything about this repository. For example:
                     user_input,
                 )
 
-            st.markdown(response)
+            render_message_with_mermaid(response)
             st.session_state.chat_history.append(("assistant", response))
