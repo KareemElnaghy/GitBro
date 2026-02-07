@@ -6,6 +6,10 @@ import shutil
 import requests
 from typing import Dict, List, Optional
 from dotenv import load_dotenv
+from pypdf import PdfReader
+from docx import Document
+from PIL import Image
+import pytesseract
 
 load_dotenv()
 
@@ -23,6 +27,12 @@ SOURCE_EXTENSIONS = {
     ".cpp", ".c", ".h", ".cs", ".rb", ".php", ".swift", ".kt",
 }
 
+# Document/image extensions we can parse
+DOCUMENT_EXTENSIONS = {
+    ".pdf", ".docx", ".doc",  # Documents
+    ".png", ".jpg", ".jpeg", ".gif", ".bmp",  # Images with text
+}
+
 # Directories to skip when walking the local clone
 SKIP_DIRS = {
     ".git", "node_modules", "__pycache__", ".venv", "venv", "env",
@@ -30,10 +40,10 @@ SKIP_DIRS = {
     ".next", ".nuxt", "vendor", "target", ".idea", ".vscode",
 }
 
-# Binary extensions to skip when reading file content
+# Binary extensions to skip when reading file content (removed parseable docs/images)
 BINARY_EXTENSIONS = {
-    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".svg",
-    ".pdf", ".zip", ".tar", ".gz", ".rar", ".7z",
+    ".ico", ".svg",  # Kept some image formats
+    ".zip", ".tar", ".gz", ".rar", ".7z",
     ".exe", ".dll", ".so", ".dylib", ".class", ".jar",
     ".pyc", ".pyo", ".whl", ".egg",
     ".mp3", ".mp4", ".wav", ".avi", ".mov",
@@ -188,24 +198,90 @@ class GitHubClient:
         except (OSError, UnicodeDecodeError):
             return None
 
+    def extract_pdf_text(self, repo_dir: str, file_path: str, max_pages: int = 20) -> Optional[str]:
+        """Extract text from a PDF file."""
+        full_path = os.path.join(repo_dir, file_path)
+        try:
+            reader = PdfReader(full_path)
+            text_parts = []
+            num_pages = min(len(reader.pages), max_pages)
+            
+            for i in range(num_pages):
+                page = reader.pages[i]
+                text = page.extract_text()
+                if text:
+                    text_parts.append(f"--- Page {i+1} ---\n{text}\n")
+            
+            if len(reader.pages) > max_pages:
+                text_parts.append(f"\n... [truncated: {len(reader.pages) - max_pages} more pages]")
+            
+            return "".join(text_parts) if text_parts else None
+        except Exception as e:
+            print(f"Error extracting PDF {file_path}: {e}")
+            return None
+
+    def extract_docx_text(self, repo_dir: str, file_path: str) -> Optional[str]:
+        """Extract text from a Word document (.docx)."""
+        full_path = os.path.join(repo_dir, file_path)
+        try:
+            doc = Document(full_path)
+            paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
+            return "\n".join(paragraphs) if paragraphs else None
+        except Exception as e:
+            print(f"Error extracting DOCX {file_path}: {e}")
+            return None
+
+    def extract_image_text(self, repo_dir: str, file_path: str) -> Optional[str]:
+        """Extract text from an image using OCR."""
+        full_path = os.path.join(repo_dir, file_path)
+        try:
+            image = Image.open(full_path)
+            text = pytesseract.image_to_string(image)
+            return text.strip() if text.strip() else None
+        except Exception as e:
+            print(f"Error extracting text from image {file_path}: {e}")
+            return None
+
+    def read_document_file(self, repo_dir: str, file_path: str) -> Optional[str]:
+        """Read a document file (PDF, DOCX, or image) and extract its text content."""
+        ext = os.path.splitext(file_path)[1].lower()
+        
+        if ext == ".pdf":
+            return self.extract_pdf_text(repo_dir, file_path)
+        elif ext in {".docx", ".doc"}:
+            return self.extract_docx_text(repo_dir, file_path)
+        elif ext in {".png", ".jpg", ".jpeg", ".gif", ".bmp"}:
+            return self.extract_image_text(repo_dir, file_path)
+        
+        return None
+
     def read_all_source_files(self, repo_dir: str, file_tree: List[Dict], max_lines: int = 500) -> Dict[str, str]:
-        """Read all source code files from the local clone."""
+        """Read all source code files and documents from the local clone."""
         code_samples = {}
 
         for item in file_tree:
             path = item["path"]
             ext = os.path.splitext(path)[1].lower()
 
-            if ext in BINARY_EXTENSIONS or ext not in SOURCE_EXTENSIONS:
+            # Skip binary files we can't parse
+            if ext in BINARY_EXTENSIONS:
                 continue
 
             # Skip very large files (likely generated/minified)
             if item.get("size", 0) > 200_000:
                 continue
 
-            content = self.read_local_file(repo_dir, path, max_lines)
-            if content:
-                code_samples[path] = content
+            # Read source code files
+            if ext in SOURCE_EXTENSIONS:
+                content = self.read_local_file(repo_dir, path, max_lines)
+                if content:
+                    code_samples[path] = content
+            
+            # Read document files (PDFs, Word docs, images)
+            elif ext in DOCUMENT_EXTENSIONS:
+                content = self.read_document_file(repo_dir, path)
+                if content:
+                    code_samples[path] = content
 
         return code_samples
 

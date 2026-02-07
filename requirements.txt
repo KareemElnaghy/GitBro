@@ -8,3 +8,7 @@ requests>=2.31.0
 pydantic>=2.7.4
 markdown
 weasyprint
+pypdf
+python-docx
+Pillow
+pytesseract
