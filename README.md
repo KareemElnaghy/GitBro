@@ -55,6 +55,10 @@ pip install -r requirements.txt
 ```
 
 **2. Configure API Key**
+
+Edit `app.py` and `src/agents/visualizer_agent.py` to add your OpenAI API key:
+```python
+os.environ["OPENAI_API_KEY"] = "your-api-key-here"
 ```
 
 **3. Run the Application**
@@ -64,6 +68,10 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 Then enter a GitHub repo URL and click "Analyze Repository"
+
+**Command Line:**
+```bash
+python3 main.py https://github.com/owner/repo
 ```
 
 ---
