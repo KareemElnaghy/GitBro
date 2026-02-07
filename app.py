@@ -4,18 +4,23 @@ Run with: streamlit run app.py
 """
 import json
 import streamlit as st
-from langchain_ollama import OllamaLLM
+from langchain_openai import ChatOpenAI
 from src.github_client import GitHubClient
 from src.graph import run_analysis
+import os
 
 # --- Page config ---
 st.set_page_config(page_title="GitBro", page_icon="🔍", layout="wide")
 
+# --- Set OpenAI API key ---
+# INSERT YOUR OPENAI API KEY HERE:
+os.environ["OPENAI_API_KEY"] = "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJhZXNKN2kxNGNidnVuTU40MTJrOU5yZ2ROeENhTlJudTNPbC1TU08ycFlJIn0.eyJleHAiOjE3NzA0NDI4MTIsImlhdCI6MTc3MDQ0MTAxMiwiYXV0aF90aW1lIjoxNzcwNDQxMDExLCJqdGkiOiJmZjUxMTdhNC04NGE2LTRjMjktYjk0OC0wMTg3NzY2MWZkODciLCJpc3MiOiJodHRwczovL2F1dGgubWNraW5zZXkuaWQvYXV0aC9yZWFsbXMvciIsImF1ZCI6ImJjZDIzNzI4LTNkMjctNDQ3Yy1hMGE5LWVhY2FmMzkzYTZmNSIsInN1YiI6IjZhZjEyNDMxLWUzYWMtNGM3Mi1hYjZhLTY5ZjI4ODlmYzZmYSIsInR5cCI6IklEIiwiYXpwIjoiYmNkMjM3MjgtM2QyNy00NDdjLWEwYTktZWFjYWYzOTNhNmY1Iiwic2Vzc2lvbl9zdGF0ZSI6ImRiNzUwODQ5LWJlMmUtNDk4NC04NmZkLWMyOGY3MThjZWFhZiIsImF0X2hhc2giOiIzMlVsT3dMMm8wUlNvUmVtX3gzUDlRIiwibmFtZSI6IlJpY2hhcmQgQ291cGVydGh3YWl0ZSIsImdpdmVuX25hbWUiOiJSaWNoYXJkIiwiZmFtaWx5X25hbWUiOiJDb3VwZXJ0aHdhaXRlIiwicHJlZmVycmVkX3VzZXJuYW1lIjoiYjJiZWVkNDk3YjdkYzRmZiIsImVtYWlsIjoiUmljaGFyZF9Db3VwZXJ0aHdhaXRlQG1ja2luc2V5LmNvbSIsImFjciI6IjEiLCJzaWQiOiJkYjc1MDg0OS1iZTJlLTQ5ODQtODZmZC1jMjhmNzE4Y2VhYWYiLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwiZm1ubyI6IjMxNjczNyIsImdyb3VwcyI6WyIyOTA3ZmExYy02ODNmLTRjZjctODU1NS04YzM0YTE2Yzg4ZDgiLCJBbGwgRmlybSBVc2VycyIsIjAzYjE1YTM0LTY1NWUtNGVjNC04MzRhLWI5ZGRhMTk3MjBmMCJdfQ.ZSSU7ZL8l5o3KFoU0fhBtwapRddVm5Nz9o1mnIBj_3XYifi77shBUsRVm2cVEL3uxLTwYpybBSet2Q64O4NZJYOlfjjlukZHUeiot79mL3iTDyprzns34ldBnWtIbUZD4S-VF7FCPbgsRmQIlPlm8BCR9UQhjgQ3Lt_fCOuyfQli5-RZU6ypESIzFsZ-X3ROKFzzmym1fif0paxcyfZiZx8gFrI_Py0fxa1pznuiSNGzJRcnSmuKQIARn0AfJGvm9VB07e5btuslRx4w1sexSy9vbJayPezt0EL3_-RDDsAUZ7u3Q3PjgVlcRfv0INgPpQjBncmSFvjsB-IPxkep8g"
+os.environ["OPENAI_BASE_URL"] = "https://openai.prod.ai-gateway.quantumblack.com/2907fa1c-683f-4cf7-8555-8c34a16c88d8/v1"
+
 # --- LLM for chat follow-ups ---
-llm = OllamaLLM(
-    model="qwen2.5-coder:7b",
+llm = ChatOpenAI(
+    model="gpt-4o-mini",
     temperature=0.3,
-    base_url="http://localhost:11434",
 )
 
 
@@ -27,13 +32,13 @@ def build_context(analysis: dict) -> str:
 
     # Include actual code samples so the LLM can reference them
     code_section = ""
-    for filename, content in list(analysis.get("code_samples", {}).items()):
-        code_section += f"\n### {filename}\n```\n{content[:1500]}\n```\n"
+    for filename, content in list(analysis.get("code_samples", {}).items())[:50]:  # Include 50 key files
+        code_section += f"\n### {filename}\n```\n{content}\n```\n"  # Full content, not truncated
 
     # Include config file contents
     config_section = ""
     for fname, content in list(analysis.get("config_files", {}).items()):
-        config_section += f"\n### {fname}\n```\n{content[:800]}\n```\n"
+        config_section += f"\n### {fname}\n```\n{content}\n```\n"  # Full content, not truncated
 
     # Include file tree for structure questions
     file_tree = analysis.get("file_tree", [])
@@ -145,7 +150,9 @@ def get_chat_response(context: str, chat_history: list, user_msg: str) -> str:
         conversation += f"{prefix}: {msg}\n\n"
     conversation += f"User: {user_msg}\n\nGitBro:"
 
-    return llm.invoke(conversation)
+    response = llm.invoke(conversation)
+    # Extract content from AIMessage object
+    return response.content if hasattr(response, 'content') else str(response)
 
 
 # --- Initialize session state ---
