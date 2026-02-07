@@ -394,26 +394,6 @@ with st.sidebar:
 
     analyze_btn = st.button("🚀 Analyze Repository", type="primary", use_container_width=True)
     
-    # Sample repositories for demo
-    with st.expander("💡 Try Sample Repositories", expanded=False):
-        st.markdown("""
-        <div style='font-size: 0.9rem; color: #94a3b8; margin-bottom: 1rem;'>
-            Click to auto-fill popular repos for demo
-        </div>
-        """, unsafe_allow_html=True)
-        
-        sample_repos = {
-            "Flask (Python Web)": "https://github.com/pallets/flask",
-            "FastAPI (Python API)": "https://github.com/tiangolo/fastapi",
-            "React (JavaScript UI)": "https://github.com/facebook/react",
-            "Express.js (Node Backend)": "https://github.com/expressjs/express",
-        }
-        
-        for name, url in sample_repos.items():
-            if st.button(f"📌 {name}", key=name, use_container_width=True):
-                st.session_state.repo_url = url
-                st.rerun()
-    
     # Help section
     with st.expander("ℹ️ How to Use", expanded=False):
         st.markdown("""
@@ -429,129 +409,39 @@ with st.sidebar:
         - 📚 Onboarding guide
         - 💬 Interactive Q&A
         """)
-    
-    st.markdown("<br><br>", unsafe_allow_html=True)
 
-    if analyze_btn and repo_url:
-        # Reset state for new analysis
-        st.session_state.chat_history = []
-        st.session_state.analysis = None
-        st.session_state.repo_url = repo_url
+# Analysis logic outside sidebar
+if analyze_btn and repo_url:
+    # Reset state for new analysis
+    st.session_state.chat_history = []
+    st.session_state.analysis = None
+    st.session_state.repo_url = repo_url
 
-        with st.status("🔍 Analyzing repository...", expanded=True) as status:
-            try:
-                st.write("⚙️ Initializing GitHub client...")
-                github_client = GitHubClient()
+    with st.status("🔍 Analyzing repository...", expanded=True) as status:
+        try:
+            st.write("⚙️ Initializing GitHub client...")
+            github_client = GitHubClient()
 
-                st.write("📥 Fetching repository data...")
-                st.write("🤖 Running 5 AI agents...")
-                final_state = run_analysis(repo_url, github_client)
+            st.write("📥 Fetching repository data...")
+            st.write("🤖 Running 5 AI agents...")
+            final_state = run_analysis(repo_url, github_client)
 
-                st.session_state.analysis = final_state
-                st.session_state.context = build_context(final_state)
+            st.session_state.analysis = final_state
+            st.session_state.context = build_context(final_state)
 
-                status.update(label="✅ Analysis complete!", state="complete")
-                st.balloons()
-            except Exception as e:
-                status.update(label=f"❌ Error: {str(e)[:100]}", state="error")
-                st.error(f"""
-                **Analysis Failed**  
-                {str(e)}
-                
-                Please check:
-                - Repository URL is correct
-                - Repository is public
-                - You have internet connection
-                """)
-
-    # Show repo info after analysis
-    if st.session_state.analysis:
-        meta = st.session_state.analysis["metadata"]
-        nav = st.session_state.analysis.get("navigator_map", {})
-        ctx = st.session_state.analysis.get("context_output", {})
-
-        st.divider()
-        
-        # Repository header
-        st.markdown(f"""
-        <div style='background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
-                    padding: 1.5rem; border-radius: 1rem; border: 1px solid rgba(99, 102, 241, 0.3);'>
-            <h2 style='color: #6366f1; margin: 0;'>{meta.get('full_name', '')}</h2>
-            <p style='color: #94a3b8; margin: 0.5rem 0 0 0;'>{meta.get('description', '')}</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        # Metrics in styled cards
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.markdown(f"""
-            <div class='metric-card'>
-                <div style='font-size: 0.875rem; color: #94a3b8;'>⭐ Stars</div>
-                <div style='font-size: 1.5rem; font-weight: 700; color: #fbbf24;'>{meta.get('stars', 0):,}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        with col2:
-            st.markdown(f"""
-            <div class='metric-card'>
-                <div style='font-size: 0.875rem; color: #94a3b8;'>🔧 Language</div>
-                <div style='font-size: 1.5rem; font-weight: 700; color: #10b981;'>{meta.get('language', '?')}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        with col3:
-            st.markdown(f"""
-            <div class='metric-card'>
-                <div style='font-size: 0.875rem; color: #94a3b8;'>🏗️ Architecture</div>
-                <div style='font-size: 1.2rem; font-weight: 600; color: #6366f1;'>{nav.get('architecture_type', 'unknown')}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        with col4:
-            confidence = nav.get('confidence_score', 0)
-            st.markdown(f"""
-            <div class='metric-card'>
-                <div style='font-size: 0.875rem; color: #94a3b8;'>🎯 Confidence</div>
-                <div style='font-size: 1.5rem; font-weight: 700; color: #8b5cf6;'>{confidence:.0%}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        if nav.get("entry_points"):
-            with st.expander("🚪 Entry Points", expanded=False):
-                for ep in nav["entry_points"]:
-                    st.code(ep, language=None)
-
-        if nav.get("core_modules_detailed"):
-            with st.expander("📦 Core Modules", expanded=False):
-                for m in nav["core_modules_detailed"]:
-                    st.markdown(f"**{m.get('path', '')}**")
-                    st.caption(m.get('purpose', ''))
-                    st.markdown("---")
-
-        if ctx.get("technologies"):
-            with st.expander("⚡ Technologies", expanded=False):
-                techs = ctx["technologies"]
-                tech_html = "".join([f"<span class='status-badge status-info'>{t}</span>" for t in techs[:10]])
-                st.markdown(tech_html, unsafe_allow_html=True)
-
-        # Architecture Diagram
-        if st.session_state.analysis.get("visualization"):
-            with st.expander("🏗️ Architecture Diagram", expanded=True):
-                mermaid_code = st.session_state.analysis.get("visualization", "")
-                st_mermaid(mermaid_code, height=500)
-
-        if st.session_state.analysis.get("errors"):
-            with st.expander("⚠️ Warnings", expanded=False):
-                for err in st.session_state.analysis["errors"]:
-                    st.warning(err)
-
-        # Agent log
-        msgs = st.session_state.analysis.get("messages", [])
-        if msgs:
-            with st.expander("🤖 Agent Activity Log", expanded=False):
-                for m in msgs:
-                    st.code(m, language=None)
+            status.update(label="✅ Analysis complete!", state="complete")
+            st.balloons()
+        except Exception as e:
+            status.update(label=f"❌ Error: {str(e)[:100]}", state="error")
+            st.error(f"""
+            **Analysis Failed**  
+            {str(e)}
+            
+            Please check:
+            - Repository URL is correct
+            - Repository is public
+            - You have internet connection
+            """)
 
 # --- Main chat area ---
 # Custom header
