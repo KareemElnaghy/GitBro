@@ -47,12 +47,30 @@ GitBro/
 - **Pydantic** - Data validation
 - **Graphviz/Mermaid** - Diagram generation
 
----
+## 🚀 How to Run
 
+**1. Install Dependencies**
+```bash
+pip install -r requirements.txt
+```
+
+**2. Configure API Key**
+```
+
+**3. Run the Application**
+
+**Web Interface (Recommended):**
+```bash
+streamlit run app.py
+```
+Then enter a GitHub repo URL and click "Analyze Repository"
+```
+
+---
 
 ## 🐛 Known Issues
 
-**Visualizer Rendering Bug** - ✅ FIXED
+**Visualizer Rendering Bug**
 
 Previous issue with Mermaid diagram rendering resolved by implementing:
 - Programmatic diagram generation (no LLM dependency)
