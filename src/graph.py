@@ -35,32 +35,39 @@ def create_agent_graph():
 def run_analysis(repo_url: str, github_client) -> AgentState:
     """
     Execute full analysis workflow on a GitHub repository.
-
-    Args:
-        repo_url: GitHub repository URL
-        github_client: Initialized GitHubClient instance
-
-    Returns:
-        Final AgentState with all analysis results
+    Clones the repo locally for file reading, uses API for metadata/commits/PRs.
     """
     owner, repo_name = github_client.parse_repo_url(repo_url)
 
-    print("Fetching data from GitHub API...")
+    print("Fetching repository metadata...")
     metadata = github_client.get_repo_metadata(owner, repo_name)
-    branch = metadata["default_branch"]
-    file_tree = github_client.get_file_tree(owner, repo_name, branch)
-    code_samples = github_client.fetch_top_files(owner, repo_name, branch)
 
-    # Fetch README once upfront so agents don't need their own GitHub client
-    readme_content = None
-    for readme_file in ["README.md", "README.rst", "README.txt", "README"]:
-        try:
-            readme_content = github_client.get_raw_content(owner, repo_name, readme_file, branch)
-            break
-        except Exception:
-            continue
+    print("Cloning repository...")
+    repo_dir = github_client.clone_repo(repo_url)
 
-    print(f"Fetched {len(file_tree)} files, {len(code_samples)} code samples")
+    try:
+        print("Scanning file tree...")
+        file_tree = github_client.walk_local_repo(repo_dir)
+
+        print(f"Reading source code ({len(file_tree)} files in repo)...")
+        code_samples = github_client.read_all_source_files(repo_dir, file_tree)
+
+        print("Reading README...")
+        readme_content = github_client.read_local_readme(repo_dir)
+
+        print("Reading config & dependency files...")
+        config_files = github_client.read_local_config_files(repo_dir, file_tree)
+    finally:
+        print("Cleaning up clone...")
+        github_client.cleanup_clone(repo_dir)
+
+    # Git data via API (commits, PRs)
+    print("Fetching commits & pull requests...")
+    recent_commits = github_client.get_recent_commits(owner, repo_name)
+    pull_requests = github_client.get_pull_requests(owner, repo_name)
+
+    print(f"Data collected: {len(code_samples)} source files, {len(config_files)} config files, "
+          f"{len(recent_commits)} commits, {len(pull_requests)} PRs")
 
     initial_state: AgentState = {
         "repo_url": repo_url,
@@ -70,6 +77,9 @@ def run_analysis(repo_url: str, github_client) -> AgentState:
         "file_tree": file_tree,
         "code_samples": code_samples,
         "readme_content": readme_content,
+        "config_files": config_files,
+        "recent_commits": recent_commits,
+        "pull_requests": pull_requests,
         "navigator_map": None,
         "context_output": None,
         "context_summary": None,

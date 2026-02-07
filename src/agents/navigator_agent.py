@@ -1,8 +1,8 @@
 """Navigator Agent - Maps repository structure and identifies entry points."""
-import json
-from typing import Dict
+from typing import Dict, List
 from langchain_ollama import OllamaLLM
 from src.state import AgentState
+from src.utils import extract_json
 
 # Initialize LLM (Ollama)
 llm = OllamaLLM(
@@ -12,51 +12,84 @@ llm = OllamaLLM(
 )
 
 
-def _extract_json(text: str) -> dict:
-    """Extract JSON from LLM response, stripping markdown code blocks if present."""
-    text = text.strip()
-    if text.startswith("```json"):
-        text = text[7:]
-    if text.startswith("```"):
-        text = text[3:]
-    if text.endswith("```"):
-        text = text[:-3]
-    return json.loads(text.strip())
+def _build_tree_view(file_tree: List[Dict]) -> str:
+    """Build a nested directory tree view from flat file list."""
+    tree = {}
+    for f in file_tree:
+        # Only include files (blobs), directories are inferred from paths
+        if f.get("type") != "blob":
+            continue
+        parts = f["path"].split("/")
+        node = tree
+        for part in parts[:-1]:
+            existing = node.get(part)
+            if existing is None or not isinstance(existing, dict):
+                node[part] = {}
+            node = node[part]
+        # Mark files with None (only if not already a directory)
+        if parts[-1] not in node or node[parts[-1]] is None:
+            node[parts[-1]] = None
+
+    lines = []
+
+    def _render(node: dict, prefix: str = ""):
+        items = sorted(node.items(), key=lambda x: (x[1] is None, x[0]))
+        for i, (name, children) in enumerate(items):
+            is_last = i == len(items) - 1
+            connector = "└── " if is_last else "├── "
+            if children is None:
+                lines.append(f"{prefix}{connector}{name}")
+            else:
+                child_count = _count_files(children)
+                lines.append(f"{prefix}{connector}{name}/ ({child_count} files)")
+                extension = "    " if is_last else "│   "
+                _render(children, prefix + extension)
+
+    _render(tree)
+    return "\n".join(lines)
+
+
+def _count_files(node: dict) -> int:
+    """Count total files in a nested tree node."""
+    count = 0
+    for v in node.values():
+        if v is None:
+            count += 1
+        else:
+            count += _count_files(v)
+    return count
 
 
 def navigator_agent(state: AgentState) -> Dict:
     """
     NAVIGATOR: Maps repo structure and identifies entry points.
-    Reads file_tree and readme_content from state, returns navigator_map.
+    Reads file_tree, readme_content, and config_files from state.
+    Returns navigator_map with architecture info.
     """
     file_tree = state["file_tree"]
     metadata = state["metadata"]
     readme_content = state.get("readme_content")
+    config_files = state.get("config_files", {})
     total_files = len(file_tree)
 
-    # Group files by top-level directory
-    directories = {}
-    for f in file_tree:
-        parts = f["path"].split("/")
-        dir_name = parts[0] if len(parts) > 1 else "root"
-        if dir_name not in directories:
-            directories[dir_name] = []
-        directories[dir_name].append(f["path"])
+    # Build full nested directory tree
+    tree_view = _build_tree_view(file_tree)
+    # Truncate if extremely large (keep first 200 lines)
+    tree_lines = tree_view.split("\n")
+    if len(tree_lines) > 200:
+        tree_view = "\n".join(tree_lines[:200]) + f"\n... and {len(tree_lines) - 200} more entries"
 
-    # Create concise directory structure for LLM
-    dir_summary = []
-    for dir_name, files in sorted(directories.items()):
-        file_count = len(files)
-        key_files = [f for f in files if any(f.endswith(ext) for ext in [".py", ".js", ".jsx", ".ts", ".tsx", ".json", ".html", ".md", ".txt"])]
-        sample_files = key_files[:10]
+    # README section
+    readme_section = ""
+    if readme_content:
+        readme_section = f"\nREADME CONTENT:\n{readme_content[:3000]}\n"
 
-        dir_summary.append(f"\n{dir_name}/ ({file_count} files)")
-        for file in sample_files:
-            dir_summary.append(f"  - {file}")
-        if len(key_files) > 10:
-            dir_summary.append(f"  ... and {len(key_files) - 10} more files")
-
-    file_tree_view = "\n".join(dir_summary)
+    # Config/dependency files section
+    config_section = ""
+    if config_files:
+        config_section = "\nCONFIG & DEPENDENCY FILES:\n"
+        for fname, content in config_files.items():
+            config_section += f"\n--- {fname} ---\n{content[:1500]}\n"
 
     prompt = f"""You are a repository structure analyst. Analyze this GitHub repository and output valid JSON only.
 
@@ -65,36 +98,57 @@ LANGUAGE: {metadata['language']}
 DESCRIPTION: {metadata['description']}
 TOTAL FILES: {total_files}
 
-FILE TREE:
-{file_tree_view}
-
-Identify:
-1. Entry points (main.py, app.py, index.js, server.js, etc.)
-2. Core modules (ALL key directories/files)
-3. Dependencies (external libraries from package files)
-4. Architecture type: Client-Server, Microservices, Monolith, Library, CLI Tool, or Mobile App
+COMPLETE FILE TREE:
+{tree_view}
+{readme_section}
+{config_section}
+Analyze the repository and identify:
+1. Entry points - files that start the application (main.py, app.py, manage.py, index.js, server.js, etc.)
+2. Core modules - ALL important directories and files with their purpose
+3. Dependencies - ACTUAL libraries from the config/dependency files above (do NOT guess)
+4. Architecture type - choose the MOST SPECIFIC type that fits
 
 RESPOND WITH VALID JSON ONLY (no markdown, no code blocks):
 {{
-  "entry_points": ["list of entry point files"],
-  "core_modules": ["list of important directories/files"],
-  "dependencies": ["detected dependencies"],
-  "architecture_type": "specific architecture type",
-  "confidence_score": 0.0
+  "entry_points": ["list of entry point files with paths"],
+  "core_modules": ["list of ALL important directories/files"],
+  "core_modules_detailed": [
+    {{"path": "src/models/", "purpose": "Database models and ORM definitions"}},
+    {{"path": "app.py", "purpose": "Main Flask application entry point"}}
+  ],
+  "dependencies": ["actual dependencies from config files"],
+  "architecture_type": "one of the types below",
+  "project_summary": "2-3 sentence summary of what this project does and how it works",
+  "confidence_score": 0.85
 }}
 
-RULES:
-- Analyze ALL {total_files} files - do not skip directories
-- If you see both frontend and backend folders, this is client-server architecture
-- Include ALL major folders in core_modules
-- confidence_score should be 0.0 to 1.0
+ARCHITECTURE TYPES (pick the best match):
+- "Web Application (Full-Stack)" - has both frontend and backend
+- "Web API / REST Service" - backend API only (Flask, FastAPI, Express, etc.)
+- "Desktop GUI Application" - uses tkinter, PyQt, Kivy, Electron, etc.
+- "CLI Tool" - command-line only, no GUI, no web server
+- "Data Science / ML Pipeline" - Jupyter notebooks, model training, data processing
+- "Mobile Application" - React Native, Flutter, Swift, Kotlin
+- "Library / Package" - meant to be imported by other projects
+- "Microservices" - multiple independent services
+- "Monolith" - single large application
+- "Static Website" - HTML/CSS/JS only
+- "DevOps / Infrastructure" - Terraform, Ansible, Docker configs
+
+CRITICAL RULES:
+- Look at the ACTUAL file tree and README - do not guess or assume
+- If README says it's a GUI app or you see tkinter/PyQt/Kivy/wxPython imports, it is "Desktop GUI Application", NOT "CLI Tool"
+- List ALL major directories in core_modules, not just a few
+- Read dependencies from the config files provided, do not invent them
+- Dependencies MUST be simple strings like "Flask==3.1.2" or "react ^19.2.0". Do NOT use key:value object format
+- confidence_score: 0.0 to 1.0 based on how much data you have
 """
 
     try:
         response = llm.invoke(prompt)
-        result = _extract_json(response)
+        result = extract_json(response)
 
-        # Add README summary
+        # Add README summary from actual content (not LLM-generated)
         if readme_content:
             readme_summary = readme_content[:500].strip()
             if len(readme_content) > 500:
@@ -105,16 +159,20 @@ RULES:
 
         return {
             "navigator_map": result,
-            "messages": [f"NAVIGATOR: Mapped {len(result.get('entry_points', []))} entry points, architecture: {result.get('architecture_type', 'unknown')}"],
+            "messages": [f"NAVIGATOR: Mapped {len(result.get('entry_points', []))} entry points, "
+                         f"{len(result.get('core_modules', []))} modules, "
+                         f"architecture: {result.get('architecture_type', 'unknown')}"],
         }
     except Exception as e:
         return {
             "navigator_map": {
                 "entry_points": [],
                 "core_modules": [],
+                "core_modules_detailed": [],
                 "dependencies": [],
                 "architecture_type": "unknown",
                 "confidence_score": 0.0,
+                "project_summary": "Analysis failed",
                 "readme_summary": "No README found",
             },
             "errors": [f"Navigator error: {e}"],

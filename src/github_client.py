@@ -1,38 +1,76 @@
-"""GitHub API client for fetching repository data without cloning."""
+"""GitHub client: clones repos locally for file reading, uses API for metadata/commits/PRs."""
 import os
+import subprocess
+import tempfile
+import shutil
 import requests
 from typing import Dict, List, Optional
 from dotenv import load_dotenv
 
 load_dotenv()
 
+# Config/dependency files to read when present
+CONFIG_FILE_NAMES = {
+    "requirements.txt", "pyproject.toml", "setup.py", "setup.cfg", "Pipfile",
+    "package.json", "tsconfig.json",
+    "go.mod", "Cargo.toml", "Gemfile", "pom.xml", "build.gradle",
+    "Makefile", "CMakeLists.txt", "Dockerfile", "docker-compose.yml",
+    "docker-compose.yaml", ".env.example", "tox.ini", "pytest.ini",
+}
+
+SOURCE_EXTENSIONS = {
+    ".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".go", ".rs",
+    ".cpp", ".c", ".h", ".cs", ".rb", ".php", ".swift", ".kt",
+}
+
+# Directories to skip when walking the local clone
+SKIP_DIRS = {
+    ".git", "node_modules", "__pycache__", ".venv", "venv", "env",
+    "dist", "build", ".egg-info", ".tox", ".mypy_cache", ".pytest_cache",
+    ".next", ".nuxt", "vendor", "target", ".idea", ".vscode",
+}
+
+# Binary extensions to skip when reading file content
+BINARY_EXTENSIONS = {
+    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".svg",
+    ".pdf", ".zip", ".tar", ".gz", ".rar", ".7z",
+    ".exe", ".dll", ".so", ".dylib", ".class", ".jar",
+    ".pyc", ".pyo", ".whl", ".egg",
+    ".mp3", ".mp4", ".wav", ".avi", ".mov",
+    ".ttf", ".woff", ".woff2", ".eot",
+    ".sqlite", ".db",
+}
+
 
 class GitHubClient:
-    """Client for GitHub API v3 and raw content access."""
-    
+    """Clones repos locally for file access. Uses GitHub API for metadata, commits, PRs."""
+
     def __init__(self, token: Optional[str] = None):
         self.token = token or os.getenv("GITHUB_TOKEN")
         self.headers = {
             "Authorization": f"token {self.token}" if self.token else "",
-            "Accept": "application/vnd.github.v3+json"
+            "Accept": "application/vnd.github.v3+json",
         }
         self.base_url = "https://api.github.com"
-    
+
+    # ---- URL parsing ----
+
     def parse_repo_url(self, url: str) -> tuple[str, str]:
         """Extract owner and repo name from GitHub URL."""
-        # Handle: https://github.com/owner/repo or github.com/owner/repo
         url = url.replace("https://", "").replace("http://", "")
         parts = url.split("github.com/")[-1].strip("/").split("/")
         if len(parts) < 2:
             raise ValueError(f"Invalid GitHub URL: {url}")
         return parts[0], parts[1]
-    
+
+    # ---- GitHub API methods (metadata, commits, PRs) ----
+
     def get_repo_metadata(self, owner: str, repo: str) -> Dict:
-        """Fetch repository metadata (stars, language, description)."""
+        """Fetch repository metadata via GitHub API."""
         url = f"{self.base_url}/repos/{owner}/{repo}"
         response = requests.get(url, headers=self.headers, timeout=10)
         response.raise_for_status()
-        
+
         data = response.json()
         return {
             "name": data.get("name"),
@@ -46,107 +84,148 @@ class GitHubClient:
             "updated_at": data.get("updated_at"),
             "homepage": data.get("homepage"),
             "topics": data.get("topics", []),
-            "default_branch": data.get("default_branch", "main")
+            "default_branch": data.get("default_branch", "main"),
         }
-    
-    def get_file_tree(self, owner: str, repo: str, branch: str = None, max_files: int = None) -> List[Dict]:
-        """
-        Fetch repository file tree via Git Trees API.
-        Returns list of {path, type, size} dicts.
-        Set max_files to limit results (useful for large repos).
-        """
-        if branch is None:
-            metadata = self.get_repo_metadata(owner, repo)
-            branch = metadata["default_branch"]
-        
-        url = f"{self.base_url}/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
-        response = requests.get(url, headers=self.headers, timeout=15)
-        response.raise_for_status()
-        
-        tree_data = response.json()
-        files = []
-        
-        items = tree_data.get("tree", [])
-        if max_files:
-            items = items[:max_files]
-        
-        for item in items:
-            files.append({
-                "path": item.get("path"),
-                "type": item.get("type"),
-                "size": item.get("size", 0),
-                "sha": item.get("sha")
-            })
-        
-        return files
-    
-    def get_raw_content(self, owner: str, repo: str, file_path: str, branch: str = "main") -> str:
-        """
-        Fetch raw file content from raw.githubusercontent.com.
-        Limits to 200 lines to prevent token overflow.
-        """
-        url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{file_path}"
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        
-        content = response.text
-        lines = content.split("\n")
-        
-        # Limit to 200 lines
-        if len(lines) > 200:
-            lines = lines[:200]
-            content = "\n".join(lines) + "\n... [truncated]"
-        
-        return content
-    
-    def identify_source_files(self, file_tree: List[Dict]) -> List[str]:
-        """
-        Identify top 10 source files from file tree.
-        Prioritizes: main.py, app.py, index.js, then .py/.js/.ts files.
-        """
-        priority_files = []
-        source_files = []
-        
-        # Extensions to consider
-        source_extensions = [".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".go", ".rs", ".cpp", ".c"]
-        
-        for item in file_tree:
-            if item["type"] != "blob":
-                continue
-            
-            path = item["path"]
-            
-            # Priority files (entry points)
-            if path in ["main.py", "app.py", "index.js", "index.ts", "main.go", "main.rs"]:
-                priority_files.append(path)
-            # Regular source files
-            elif any(path.endswith(ext) for ext in source_extensions):
-                # Skip test files and config files
-                if "test" not in path.lower() and "config" not in path.lower():
-                    source_files.append(path)
-        
-        # Return top 10: priority first, then others
-        selected = priority_files + source_files
-        return selected[:10]
-    
-    def fetch_top_files(self, owner: str, repo: str, branch: str = None, max_files: int = 10) -> Dict[str, str]:
-        """
-        Fetch content of top source files.
-        Returns {filename: content} dict.
-        """
-        if branch is None:
-            metadata = self.get_repo_metadata(owner, repo)
-            branch = metadata["default_branch"]
-        
-        file_tree = self.get_file_tree(owner, repo, branch)
-        source_files = self.identify_source_files(file_tree)[:max_files]
-        
+
+    def get_recent_commits(self, owner: str, repo: str, max_commits: int = 15) -> List[Dict]:
+        """Fetch recent commits via GitHub API."""
+        url = f"{self.base_url}/repos/{owner}/{repo}/commits"
+        params = {"per_page": max_commits}
+        try:
+            response = requests.get(url, headers=self.headers, params=params, timeout=10)
+            response.raise_for_status()
+            commits = []
+            for c in response.json():
+                commits.append({
+                    "sha": c["sha"][:7],
+                    "message": c["commit"]["message"].split("\n")[0][:120],
+                    "author": c["commit"]["author"]["name"],
+                    "date": c["commit"]["author"]["date"][:10],
+                })
+            return commits
+        except Exception:
+            return []
+
+    def get_pull_requests(self, owner: str, repo: str, max_prs: int = 10) -> List[Dict]:
+        """Fetch recent pull requests via GitHub API."""
+        url = f"{self.base_url}/repos/{owner}/{repo}/pulls"
+        params = {"state": "all", "per_page": max_prs, "sort": "updated", "direction": "desc"}
+        try:
+            response = requests.get(url, headers=self.headers, params=params, timeout=10)
+            response.raise_for_status()
+            prs = []
+            for pr in response.json():
+                prs.append({
+                    "number": pr["number"],
+                    "title": pr["title"][:120],
+                    "state": pr["state"],
+                    "author": pr["user"]["login"],
+                    "created": pr["created_at"][:10],
+                    "labels": [l["name"] for l in pr.get("labels", [])],
+                })
+            return prs
+        except Exception:
+            return []
+
+    # ---- Local clone operations ----
+
+    def clone_repo(self, repo_url: str) -> str:
+        """Shallow clone a repo into a temp directory. Returns the directory path."""
+        temp_dir = tempfile.mkdtemp(prefix="gitbro_")
+        result = subprocess.run(
+            ["git", "clone", "--depth", "1", repo_url, temp_dir],
+            capture_output=True, text=True, timeout=120,
+        )
+        if result.returncode != 0:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            raise RuntimeError(f"git clone failed: {result.stderr.strip()}")
+        return temp_dir
+
+    def cleanup_clone(self, repo_dir: str):
+        """Remove the cloned repo directory."""
+        if repo_dir and os.path.exists(repo_dir):
+            shutil.rmtree(repo_dir, ignore_errors=True)
+
+    def walk_local_repo(self, repo_dir: str) -> List[Dict]:
+        """Walk a local repo directory and return file tree (same format agents expect)."""
+        file_tree = []
+        for root, dirs, files in os.walk(repo_dir):
+            # Skip ignored directories in-place so os.walk doesn't descend
+            dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not d.startswith("."))
+
+            for filename in sorted(files):
+                if filename.startswith("."):
+                    continue
+
+                full_path = os.path.join(root, filename)
+                rel_path = os.path.relpath(full_path, repo_dir).replace(os.sep, "/")
+
+                try:
+                    size = os.path.getsize(full_path)
+                except OSError:
+                    size = 0
+
+                file_tree.append({
+                    "path": rel_path,
+                    "type": "blob",
+                    "size": size,
+                })
+
+        return file_tree
+
+    def read_local_file(self, repo_dir: str, file_path: str, max_lines: int = 500) -> Optional[str]:
+        """Read a text file from the local clone. Returns None if unreadable."""
+        full_path = os.path.join(repo_dir, file_path)
+        try:
+            with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+                lines = []
+                for i, line in enumerate(f):
+                    if i >= max_lines:
+                        lines.append(f"\n... [truncated at {max_lines} lines]")
+                        break
+                    lines.append(line)
+                return "".join(lines)
+        except (OSError, UnicodeDecodeError):
+            return None
+
+    def read_all_source_files(self, repo_dir: str, file_tree: List[Dict], max_lines: int = 500) -> Dict[str, str]:
+        """Read all source code files from the local clone."""
         code_samples = {}
-        for file_path in source_files:
-            try:
-                content = self.get_raw_content(owner, repo, file_path, branch)
-                code_samples[file_path] = content
-            except Exception as e:
-                code_samples[file_path] = f"[Error fetching file: {e}]"
-        
+
+        for item in file_tree:
+            path = item["path"]
+            ext = os.path.splitext(path)[1].lower()
+
+            if ext in BINARY_EXTENSIONS or ext not in SOURCE_EXTENSIONS:
+                continue
+
+            # Skip very large files (likely generated/minified)
+            if item.get("size", 0) > 200_000:
+                continue
+
+            content = self.read_local_file(repo_dir, path, max_lines)
+            if content:
+                code_samples[path] = content
+
         return code_samples
+
+    def read_local_config_files(self, repo_dir: str, file_tree: List[Dict]) -> Dict[str, str]:
+        """Read config/dependency files from the local clone."""
+        config_files = {}
+
+        for item in file_tree:
+            filename = item["path"].split("/")[-1]
+            if filename in CONFIG_FILE_NAMES:
+                content = self.read_local_file(repo_dir, item["path"], max_lines=150)
+                if content:
+                    config_files[item["path"]] = content
+
+        return config_files
+
+    def read_local_readme(self, repo_dir: str) -> Optional[str]:
+        """Read the README file from the local clone."""
+        for name in ["README.md", "README.rst", "README.txt", "README"]:
+            content = self.read_local_file(repo_dir, name, max_lines=500)
+            if content:
+                return content
+        return None

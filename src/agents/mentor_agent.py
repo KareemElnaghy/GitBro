@@ -1,8 +1,8 @@
 """Mentor Agent - Creates onboarding guide and learning path."""
-import json
 from typing import Dict
 from langchain_ollama import OllamaLLM
 from src.state import AgentState
+from src.utils import extract_json
 
 # Initialize LLM
 llm = OllamaLLM(
@@ -10,18 +10,6 @@ llm = OllamaLLM(
     temperature=0.1,
     base_url="http://localhost:11434"
 )
-
-
-def _extract_json(text: str) -> dict:
-    """Extract JSON from LLM response, stripping markdown code blocks if present."""
-    text = text.strip()
-    if text.startswith("```json"):
-        text = text[7:]
-    if text.startswith("```"):
-        text = text[3:]
-    if text.endswith("```"):
-        text = text[:-3]
-    return json.loads(text.strip())
 
 
 def mentor_agent(state: AgentState) -> Dict:
@@ -71,7 +59,7 @@ Base time estimates on actual code complexity. Use realistic estimates.
 
     try:
         response = llm.invoke(prompt)
-        result = _extract_json(response)
+        result = extract_json(response)
 
         # Create human-readable guide
         guide = f"""ONBOARDING GUIDE - {metadata['full_name']}

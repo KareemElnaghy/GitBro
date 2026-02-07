@@ -16,6 +16,9 @@ class AgentState(TypedDict):
     file_tree: List[Dict]  # [{path, type, size}]
     code_samples: Dict[str, str]  # {filename: content}
     readme_content: Optional[str]  # README text fetched once upfront
+    config_files: Dict[str, str]  # {filename: content} for requirements.txt, package.json, etc.
+    recent_commits: List[Dict]  # [{sha, message, author, date}]
+    pull_requests: List[Dict]  # [{number, title, state, author}]
 
     # Agent Outputs
     navigator_map: Optional[Dict]  # entry_points, core_modules, dependencies
